@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-type AuthMode = "token" | "credentials" | "azure";
+type AuthMode = "token" | "credentials";
 type Action = "in" | "out";
 
 type CheckResponse = {
@@ -11,14 +11,7 @@ type CheckResponse = {
   token?: string;
 };
 
-type LoginAzureResponse = {
-  ok: boolean;
-  token?: string;
-  error?: string;
-};
-
 const TOKEN_KEY = "fis.token";
-const AZURE_KEY = "fis.azureRefresh";
 
 const MODES: { id: AuthMode; label: string }[] = [
   { id: "token", label: "Token" },
@@ -29,11 +22,11 @@ function Field({
   id,
   label,
   children,
-}: {
+}: Readonly<{
   id: string;
   label: string;
   children: ReactNode;
-}) {
+}>) {
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="label">
@@ -49,21 +42,17 @@ export default function HomePage() {
   const [token, setToken] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [azureRefresh, setAzureRefresh] = useState("");
   const [loading, setLoading] = useState<Action | null>(null);
-  const [azureLoading, setAzureLoading] = useState(false);
   const [status, setStatus] = useState<{
     kind: "success" | "error";
     text: string;
   } | null>(null);
 
-  const busy = loading !== null || azureLoading;
+  const busy = loading !== null;
 
   useEffect(() => {
     const saved = globalThis.localStorage.getItem(TOKEN_KEY);
     if (saved) setToken(saved);
-    const savedAzure = globalThis.localStorage.getItem(AZURE_KEY);
-    if (savedAzure) setAzureRefresh(savedAzure);
   }, []);
 
   const persistToken = useCallback((next: string) => {
@@ -71,48 +60,6 @@ export default function HomePage() {
     if (next) globalThis.localStorage.setItem(TOKEN_KEY, next);
     else globalThis.localStorage.removeItem(TOKEN_KEY);
   }, []);
-
-  const persistAzureRefresh = useCallback((next: string) => {
-    setAzureRefresh(next);
-    if (next) globalThis.localStorage.setItem(AZURE_KEY, next);
-    else globalThis.localStorage.removeItem(AZURE_KEY);
-  }, []);
-
-  const handleAzureLogin = useCallback(async () => {
-    setStatus(null);
-    if (!azureRefresh.trim()) {
-      setStatus({ kind: "error", text: "Dán Azure refresh token." });
-      return;
-    }
-
-    setAzureLoading(true);
-    try {
-      const res = await fetch("/api/login-azure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: azureRefresh.trim() }),
-      });
-      const data = (await res.json()) as LoginAzureResponse;
-
-      if (data.ok && data.token) {
-        persistToken(data.token);
-        persistAzureRefresh(azureRefresh.trim());
-        setStatus({ kind: "success", text: "Đã lấy access token." });
-      } else {
-        setStatus({
-          kind: "error",
-          text: data.error || "Không lấy được token.",
-        });
-      }
-    } catch (err) {
-      setStatus({
-        kind: "error",
-        text: err instanceof Error ? err.message : "Lỗi mạng",
-      });
-    } finally {
-      setAzureLoading(false);
-    }
-  }, [azureRefresh, persistToken, persistAzureRefresh]);
 
   const handleCheck = useCallback(
     async (action: Action) => {
@@ -130,10 +77,7 @@ export default function HomePage() {
         if (!token.trim()) {
           setStatus({
             kind: "error",
-            text:
-              mode === "azure"
-                ? "Lấy access token trước."
-                : "Nhập bearer token.",
+            text: "Nhập bearer token.",
           });
           return;
         }
@@ -174,15 +118,13 @@ export default function HomePage() {
 
         <nav
           className="mt-6 flex border-b border-neutral-100"
-          role="tablist"
           aria-label="Cách đăng nhập"
         >
           {MODES.map(({ id, label }) => (
             <button
               key={id}
               type="button"
-              role="tab"
-              aria-selected={mode === id}
+              aria-pressed={mode === id}
               className={`tab ${mode === id ? "tab-active" : ""}`}
               onClick={() => setMode(id)}
             >
@@ -196,7 +138,7 @@ export default function HomePage() {
             <Field id="token" label="Bearer token">
               <textarea
                 id="token"
-                className="field-mono min-h-[7rem] resize-y"
+                className="field-mono min-h-28 resize-y"
                 placeholder="eyJhbGciOi…"
                 value={token}
                 onChange={(e) => persistToken(e.target.value)}
@@ -233,30 +175,6 @@ export default function HomePage() {
               </Field>
             </>
           )}
-
-          {mode === "azure" && (
-            <>
-              <Field id="azure-refresh" label="Refresh token">
-                <textarea
-                  id="azure-refresh"
-                  className="field-mono min-h-[7rem] resize-y"
-                  placeholder="1.AXIACp…"
-                  value={azureRefresh}
-                  onChange={(e) => persistAzureRefresh(e.target.value)}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-              </Field>
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={handleAzureLogin}
-                disabled={busy}
-              >
-                {azureLoading ? "Đang lấy…" : "Lấy access token"}
-              </button>
-            </>
-          )}
         </div>
 
         {status && (
@@ -282,7 +200,7 @@ export default function HomePage() {
                 setStatus(null);
               }}
             >
-              Xoá token
+              Remove token
             </button>
           </footer>
         )}
@@ -296,7 +214,7 @@ export default function HomePage() {
             onClick={() => handleCheck("in")}
             disabled={busy}
           >
-            {loading === "in" ? "Đang vào…" : "Check-in"}
+            {loading === "in" ? "Checking in..." : "Check in"}
           </button>
           <button
             type="button"
@@ -304,7 +222,7 @@ export default function HomePage() {
             onClick={() => handleCheck("out")}
             disabled={busy}
           >
-            {loading === "out" ? "Đang ra…" : "Check-out"}
+            {loading === "out" ? "Checking out..." : "Check out"}
           </button>
         </div>
       </div>

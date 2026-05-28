@@ -2,8 +2,6 @@ import https from "node:https";
 import axios, { AxiosError } from "axios";
 
 export const LOGIN_ENDPOINT = "https://ddc.fis.vn/fis0/api/login";
-export const LOGIN_AZURE_ENDPOINT =
-  "https://ddc.fis.vn/fis0/api/login_azure";
 export const CHECK_IN_ENDPOINT = "https://ddc.fis.vn/fis0/api/checkin_all";
 export const CHECK_OUT_ENDPOINT = "https://ddc.fis.vn/fis0/api/checkout_all";
 
@@ -32,11 +30,6 @@ const LOGIN_EXTRA = {
   osVersion: env("FIS_OS_VERSION", "17.6.1"),
 };
 
-const AZURE_LOGIN_EXTRA = {
-  buildNumber: env("FIS_AZURE_BUILD_NUMBER", "11318"),
-  version: env("FIS_AZURE_VERSION", "1.154"),
-};
-
 const buildHeaders = (token?: string) => {
   const headers: Record<string, string> = {
     Host: "ddc.fis.vn",
@@ -49,14 +42,6 @@ const buildHeaders = (token?: string) => {
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 };
-
-const buildAzureHeaders = () => ({
-  ...buildHeaders(),
-  "User-Agent": env(
-    "FIS_AZURE_USER_AGENT",
-    "FIS/11318 CFNetwork/3860.500.112 Darwin/25.4.0",
-  ),
-});
 
 const extractLoginToken = (data: unknown): string | undefined => {
   if (!data || typeof data !== "object") return undefined;
@@ -107,43 +92,6 @@ export const login = async (
       return {
         ok: false,
         error: data?.message || "Login failed: no token returned",
-        raw: data,
-      };
-    }
-    return { ok: true, token, raw: data };
-  } catch (err) {
-    const e = normalizeError(err);
-    return { ok: false, error: e.message, raw: e.data };
-  }
-};
-
-export const loginAzure = async (
-  refreshToken: string,
-): Promise<LoginResult> => {
-  try {
-    const { data } = await axios.post(
-      LOGIN_AZURE_ENDPOINT,
-      {
-        username: null,
-        password: null,
-        azure: true,
-        token: refreshToken,
-        type: "refresh_token",
-        ...AZURE_LOGIN_EXTRA,
-      },
-      { httpsAgent, headers: buildAzureHeaders(), timeout: 15_000 },
-    );
-    const token = extractLoginToken(data);
-    if (!token) {
-      return {
-        ok: false,
-        error:
-          (typeof data === "object" &&
-            data !== null &&
-            "message" in data &&
-            typeof (data as { message?: unknown }).message === "string" &&
-            (data as { message: string }).message) ||
-          "Azure login failed: no access token returned",
         raw: data,
       };
     }
