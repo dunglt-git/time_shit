@@ -1,8 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { KeyRound, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { getStoredToken, setStoredToken } from "@/lib/auth";
 
-type AuthMode = "token" | "credentials";
 type Action = "in" | "out";
 
 type CheckResponse = {
@@ -11,37 +36,10 @@ type CheckResponse = {
   token?: string;
 };
 
-const TOKEN_KEY = "fis.token";
-
-const MODES: { id: AuthMode; label: string }[] = [
-  { id: "token", label: "Token" },
-  { id: "credentials", label: "Tài khoản" },
-];
-
-function Field({
-  id,
-  label,
-  children,
-}: Readonly<{
-  id: string;
-  label: string;
-  children: ReactNode;
-}>) {
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="label">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
 export default function HomePage() {
-  const [mode, setMode] = useState<AuthMode>("token");
+  const router = useRouter();
   const [token, setToken] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState<Action | null>(null);
   const [status, setStatus] = useState<{
     kind: "success" | "error";
@@ -51,37 +49,22 @@ export default function HomePage() {
   const busy = loading !== null;
 
   useEffect(() => {
-    const saved = globalThis.localStorage.getItem(TOKEN_KEY);
-    if (saved) setToken(saved);
+    setToken(getStoredToken());
+    setReady(true);
   }, []);
 
   const persistToken = useCallback((next: string) => {
     setToken(next);
-    if (next) globalThis.localStorage.setItem(TOKEN_KEY, next);
-    else globalThis.localStorage.removeItem(TOKEN_KEY);
+    setStoredToken(next);
   }, []);
 
   const handleCheck = useCallback(
     async (action: Action) => {
       setStatus(null);
-      const payload: Record<string, string> = { action };
 
-      if (mode === "credentials") {
-        if (!username.trim() || !password) {
-          setStatus({ kind: "error", text: "Nhập username và password." });
-          return;
-        }
-        payload.username = username.trim();
-        payload.password = password;
-      } else {
-        if (!token.trim()) {
-          setStatus({
-            kind: "error",
-            text: "Nhập bearer token.",
-          });
-          return;
-        }
-        payload.token = token.trim();
+      if (!token.trim()) {
+        setStatus({ kind: "error", text: "No token. Please sign in first." });
+        return;
       }
 
       setLoading(action);
@@ -89,7 +72,7 @@ export default function HomePage() {
         const res = await fetch("/api/check", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ action, token: token.trim() }),
         });
         const data = (await res.json()) as CheckResponse;
 
@@ -97,133 +80,161 @@ export default function HomePage() {
 
         setStatus({
           kind: data.ok ? "success" : "error",
-          text: data.message || (data.ok ? "OK" : "Lỗi"),
+          text: data.message || (data.ok ? "Success" : "Failed"),
         });
       } catch (err) {
         setStatus({
           kind: "error",
-          text: err instanceof Error ? err.message : "Lỗi mạng",
+          text: err instanceof Error ? err.message : "Network error",
         });
       } finally {
         setLoading(null);
       }
     },
-    [mode, token, username, password, persistToken],
+    [token, persistToken],
   );
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:px-6 sm:py-8">
-        <h1 className="text-lg font-medium tracking-tight">Check-in</h1>
-
-        <nav
-          className="mt-6 flex border-b border-neutral-100"
-          aria-label="Cách đăng nhập"
-        >
-          {MODES.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={mode === id}
-              className={`tab ${mode === id ? "tab-active" : ""}`}
-              onClick={() => setMode(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="mt-6 flex-1 space-y-5">
-          {mode === "token" && (
-            <Field id="token" label="Bearer token">
-              <textarea
-                id="token"
-                className="field-mono min-h-28 resize-y"
-                placeholder="eyJhbGciOi…"
-                value={token}
-                onChange={(e) => persistToken(e.target.value)}
-                spellCheck={false}
-                autoComplete="off"
-              />
-            </Field>
-          )}
-
-          {mode === "credentials" && (
-            <>
-              <Field id="username" label="Username">
-                <input
-                  id="username"
-                  className="field"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  autoComplete="username"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  enterKeyHint="next"
-                />
-              </Field>
-              <Field id="password" label="Password">
-                <input
-                  id="password"
-                  type="password"
-                  className="field"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  enterKeyHint="done"
-                />
-              </Field>
-            </>
-          )}
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:px-6 sm:py-8">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Time shit</h1>
+          <p className="text-sm text-muted-foreground">
+            FIS check-in on your phone.
+          </p>
         </div>
 
-        {status && (
-          <output
-            className={`mt-4 block text-sm leading-relaxed ${
-              status.kind === "success" ? "text-neutral-500" : "text-red-600"
-            }`}
-          >
-            {status.text}
-          </output>
+        {!token ? (
+          <Card>
+            <CardHeader className="items-center text-center">
+              <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                <KeyRound className="size-5 text-muted-foreground" />
+              </div>
+              <CardTitle className="pt-2">Not signed in</CardTitle>
+              <CardDescription>
+                Sign in to get a token before check-in.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="w-full" size="lg">
+                <Link href="/login">Sign in</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="pb-3">
+              <Badge variant="success" className="w-fit">
+                Token saved
+              </Badge>
+              <CardDescription className="pt-2 font-mono text-xs leading-relaxed break-all">
+                {token}
+              </CardDescription>
+            </CardHeader>
+          </Card>
         )}
 
-        {token && (
-          <footer className="mt-4 flex items-center justify-between gap-3 text-xs text-neutral-400">
-            <span className="min-w-0 truncate font-mono">
-              {token.slice(0, 20)}…
-            </span>
-            <button
-              type="button"
-              className="min-h-11 shrink-0 px-2 text-neutral-600 active:text-neutral-950"
-              onClick={() => {
-                persistToken("");
-                setStatus(null);
-              }}
-            >
-              Remove token
-            </button>
-          </footer>
+        {status && (
+          <Alert variant={status.kind === "success" ? "success" : "destructive"}>
+            <AlertDescription>{status.text}</AlertDescription>
+          </Alert>
         )}
       </main>
 
-      <div className="sticky bottom-0 border-t border-neutral-100 bg-white/90 px-4 pt-3 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:border-0 sm:bg-transparent sm:px-6 sm:pb-8 sm:pt-0 sm:backdrop-blur-none">
-        <div className="mx-auto grid max-w-md grid-cols-2 gap-2">
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => handleCheck("in")}
-            disabled={busy}
-          >
-            {loading === "in" ? "Checking in..." : "Check in"}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => handleCheck("out")}
-            disabled={busy}
-          >
-            {loading === "out" ? "Checking out..." : "Check out"}
-          </button>
+      <div className="sticky bottom-0 border-t bg-background/95 px-4 pt-3 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:border-0 sm:bg-transparent sm:px-6 sm:pb-8 sm:pt-0 sm:shadow-none sm:backdrop-blur-none">
+        <div className="mx-auto max-w-md space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="success"
+              size="lg"
+              onClick={() => handleCheck("in")}
+              disabled={busy || !token}
+            >
+              {loading === "in" ? (
+                <Loader2 className="animate-spin" />
+              ) : null}
+              {loading === "in" ? "Checking in…" : "Check-in"}
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => handleCheck("out")}
+              disabled={busy || !token}
+            >
+              {loading === "out" ? (
+                <Loader2 className="animate-spin" />
+              ) : null}
+              {loading === "out" ? "Checking out…" : "Check-out"}
+            </Button>
+          </div>
+
+          {token && (
+            <>
+              <Separator />
+              <div className="flex flex-col gap-2">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="secondary" disabled={busy}>
+                      Change token
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Change token?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        You will go to sign in and get a new token. Your
+                        current token will be replaced after a successful sign
+                        in.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => router.push("/login")}>
+                        Continue
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" className="text-destructive" disabled={busy}>
+                      Remove token
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Remove token?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This removes the token from your browser. You will need
+                        to sign in again to check in.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={() => {
+                          persistToken("");
+                          setStatus(null);
+                        }}
+                      >
+                        Remove
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -87,6 +87,14 @@ export const login = async (
       { username, password, ...LOGIN_EXTRA },
       { httpsAgent, headers: buildHeaders(), timeout: 15_000 }
     );
+    if (data?.resultCode !== undefined && data.resultCode !== 1) {
+      return {
+        ok: false,
+        error: data?.message || "Login failed",
+        raw: data,
+      };
+    }
+
     const token = extractLoginToken(data);
     if (!token) {
       return {
@@ -127,7 +135,7 @@ export const check = async (
     const alreadyDone =
       data?.resultCode === -1 &&
       typeof data?.message === "string" &&
-      /đã check/i.test(data.message);
+      /đã check|already check/i.test(data.message);
 
     const ok = data?.resultCode === 1 || alreadyDone;
     return {

@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Check-in",
+  title: "Time shit",
   description: "FIS check-in / check-out",
 };
 
@@ -10,7 +10,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#ffffff",
+  themeColor: "#f5f5f5",
 };
 
 export default function RootLayout({
@@ -19,8 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi">
-      <body className="touch-manipulation font-sans">{children}</body>
+    <html lang="en">
+      <body className="touch-manipulation font-sans antialiased">{children}</body>
     </html>
   );
 }
